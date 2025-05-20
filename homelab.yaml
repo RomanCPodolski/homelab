@@ -1,0 +1,128 @@
+version: "3.9"
+
+services:
+
+  traefik:
+    image: traefik:latest
+    command:
+      - "--api.dashboard=true"
+      - "--providers.swarm=true"
+      - "--providers.swarm.watch=true"
+      - "--providers.file.directory=/etc/traefik/dynamic_conf"
+      - "--providers.file.watch=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      # - "--entrypoints.ssh.address=:222"
+      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./dynamic_conf:/etc/traefik/dynamic_conf"
+    networks:
+      - homelab
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - traefik.enable=true
+        - traefik.http.services.dummyService.loadbalancer.server.port=1337
+        - traefik.http.routers.traefik_http.service=api@internal
+        - traefik.http.routers.traefik_http.entrypoints=web
+        - traefik.http.routers.traefik_http.rule=Host(`traefik`)
+        - traefik.docker.network=homelab
+
+  landingpage:
+    image: ghcr.io/gethomepage/homepage:latest
+    environment:
+      - HOMEPAGE_ALLOWED_HOSTS=homepage,landingpage
+    volumes:
+      - homepage:app/config
+      # - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - homelab
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.landingpage.rule=Host(`homepage`)"
+        - "traefik.http.routers.landingpage.entrypoints=web"
+        - "traefik.http.services.landingpage.loadbalancer.server.port=3000"
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - homelab
+    deploy:
+      restart_policy:
+        condition: any
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.portainer.rule=Host(`portainer`)"
+        - "traefik.http.routers.portainer.entrypoints=web"
+        - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+# gitserver:
+#   image: gitea/gitea:latest
+#   volumes:
+#     - gitea_data:/data
+#   networks:
+#     - homelab
+#   environment:
+#     USER_UID: 1000
+#     USER_GID: 1000
+#     GITEA_database_DB_TYPE: postgres
+#     GITEA_database_HOST: postgres:5432
+#     GITEA_database_NAME: gitea
+#     GITEA_database_USER: gitea
+#     GITEA_database_PASSWD: gitea
+#   deploy:
+#     restart_policy:
+#       condition: any
+#     labels:
+#       - "traefik.enable=true"
+#       - "traefik.http.routers.gitserver.rule=Host(`gitea`)"
+#       - "traefik.http.routers.gitserver.entrypoints=web"
+#       - "traefik.http.services.gitserver.loadbalancer.server.port=3000"
+#       # - "traefik.ssh.services.gitserver.loadbalancer.server.port=222"
+
+# database:
+#   image: postgres:latest
+#   volumes:
+#     - gitea_data:/var/lib/postgresql/data
+#   networks:
+#     - homelab
+#   environment:
+#     POSTGRES_USER: gitea
+#     POSTGRES_PASSWORD: gitea
+#     POSTGRES_DB: gitea
+#   deploy:
+#     restart_policy:
+#       condition: any
+#     labels:
+#       - "traefik.enable=false"
+        # - "traefik.http.routers.database.rule=Host(`gitea`)"
+        # - "traefik.http.routers.database.entrypoints=web"
+        # - "traefik.http.services.database.loadbalancer.server.port=5432"
+      
+networks:
+  homelab:
+    driver: overlay
+
+volumes:
+  homepage:
+  portainer_data:
+  gitea_data:
+  pihole_data:
+  dnsmasq_data:

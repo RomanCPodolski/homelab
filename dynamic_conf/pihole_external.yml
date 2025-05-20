@@ -1,0 +1,13 @@
+http:
+  routers:
+    pihole-external-router:
+      entryPoints:
+        - web
+      service: pihole-external-service
+      rule: Host(`pihole`)
+  
+  services:
+    pihole-external-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.178.150:8008"
